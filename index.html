@@ -1,0 +1,116 @@
+import bpy
+import math
+
+def clean_scene():
+    """Padam objek mesh sedia ada untuk persekitaran bersih"""
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.ops.object.select_by_type(type='MESH')
+    bpy.ops.object.delete()
+
+def create_material(name, color_rgba, metallic=0.5, roughness=0.2):
+    """Cipta bahan (material) baharu"""
+    mat = bpy.data.materials.get(name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=name)
+        mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        bsdf = nodes.get("Principled BSDF")
+        if bsdf:
+            bsdf.inputs['Base Color'].default_value = color_rgba
+            bsdf.inputs['Metallic'].default_value = metallic
+            bsdf.inputs['Roughness'].default_value = roughness
+    return mat
+
+def generate_faceted_tower():
+    clean_scene()
+    
+    # Setup Bahan (Materials)
+    glass_mat = create_material("Tower_Glass_Blue", (0.05, 0.35, 0.75, 1.0), metallic=0.85, roughness=0.1)
+    spire_mat = create_material("Spire_Steel", (0.1, 0.4, 0.8, 1.0), metallic=0.9, roughness=0.15)
+    podium_mat = create_material("Podium_Base", (0.02, 0.15, 0.35, 1.0), metallic=0.6, roughness=0.3)
+
+    # Parameter Menara
+    levels = 8
+    total_height = 40.0
+    num_sides = 6
+    verts = []
+    faces = []
+
+    # Bina Geometri Menara Bersegi (Faceted Geometry)
+    for i in range(levels + 1):
+        z = (i / levels) * total_height
+        
+        # Variasi jejari & putaran untuk kesan muka geometri kristal
+        if i == 0:
+            radius = 3.0
+        elif i == levels:
+            radius = 1.0
+        elif i % 2 == 1:
+            radius = 4.0
+        else:
+            radius = 3.0
+            
+        angle_offset = (math.pi / num_sides) * (i % 2)
+        
+        for j in range(num_sides):
+            angle = j * (2 * math.pi / num_sides) + angle_offset
+            x = radius * math.cos(angle)
+            y = radius * math.sin(angle)
+            verts.append((x, y, z))
+
+    # Sambung Voteks Menjadi Muka Poligon (Quads)
+    for i in range(levels):
+        for j in range(num_sides):
+            curr_idx = i * num_sides + j
+            next_j = (j + 1) % num_sides
+            curr_next_idx = i * num_sides + next_j
+            
+            upper_idx = (i + 1) * num_sides + j
+            upper_next_idx = (i + 1) * num_sides + next_j
+            
+            faces.append([curr_idx, curr_next_idx, upper_next_idx, upper_idx])
+
+    # Muka Bumbung Atas
+    top_start = levels * num_sides
+    faces.append([top_start + j for j in range(num_sides)])
+
+    # Cipta Objek Mesh Menara
+    mesh = bpy.data.meshes.new("Menara_Bersegi_Mesh")
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+
+    tower_obj = bpy.data.objects.new("Menara_Bersegi", mesh)
+    bpy.context.collection.objects.link(tower_obj)
+    tower_obj.data.materials.append(glass_mat)
+
+    # 1. Tambah Spire (Menara Pemancar di Atas)
+    bpy.ops.mesh.primitive_cylinder_add(
+        radius=0.15,
+        depth=12.0,
+        location=(0, 0, total_height + 6.0)
+    )
+    spire_obj = bpy.context.active_object
+    spire_obj.name = "Menara_Spire"
+    spire_obj.data.materials.append(spire_mat)
+
+    # 2. Tambah Asas Podium Bergeometri di Bawah
+    bpy.ops.mesh.primitive_cone_add(
+        vertices=8,
+        radius1=6.5,
+        radius2=4.0,
+        depth=3.5,
+        location=(0, 0, 1.75)
+    )
+    podium_obj = bpy.context.active_object
+    podium_obj.name = "Menara_Podium"
+    podium_obj.data.materials.append(podium_mat)
+
+    # Pilih Semua Objek Menara
+    bpy.ops.object.select_all(action='DESELECT')
+    tower_obj.select_set(True)
+    spire_obj.select_set(True)
+    podium_obj.select_set(True)
+    bpy.context.view_layer.objects.active = tower_obj
+
+# Jalankan fungsi
+generate_faceted_tower()
